@@ -1,13 +1,12 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <unistd.h>
 #include "green_pass.h"
 
 #define SERVERV_ADDRESS "127.0.0.1"
-#define SERVERV_PORT 8889
+#define SERVERV_PORT 8890
 #define CENTER_PORT 8888
 
 int main() {
@@ -93,34 +92,17 @@ int main() {
             break;
         }
 
-        /* Si apre un file in modalità di lettura e scrittura per controllare se il codice ricevuto è
-         * già stato salvato. In caso contrario, esso verrà scritto su file */
-        FILE * green_pass_list = fopen("green_pass.txt", "r+");
-        if (green_pass_list == NULL) {
-            perror("Errore durante l'apertura del file");
-            close(client_sock);
-            continue;
-        }
-        char buffer[TESSERA_LENGTH + 1];
-        int alreadyExists = 1;
-
-        while (fgets(buffer, sizeof(buffer), green_pass_list) != NULL) {
-            if (strcmp(buffer, green_pass.tessera_sanitaria) == 0) {
-                alreadyExists = 0;
-                break;
-            }
-        }
-
-        if (alreadyExists == 0) {
-            printf("Green pass già inserito su file.\n");
-            close(client_sock);
-            continue;
-        }
-
-        fprintf(green_pass_list, "%s\n", green_pass.tessera_sanitaria);
-        fclose(green_pass_list);
         green_pass.valid_from = time(NULL);
         green_pass.valid_until = (time(NULL) + 30 * 24 * 60 * 60);
+        struct tm *from_ptr = localtime(&green_pass.valid_from);
+        struct tm *until_ptr = localtime(&green_pass.valid_until);
+
+
+        char valid_from[11];
+        strftime(valid_from, sizeof(valid_from), "%d/%m/%Y", from_ptr);
+        char valid_until[11];
+        strftime(valid_until, sizeof(valid_until), "%d/%m/%Y", until_ptr);
+        printf("%s : %s : %s\n", green_pass.tessera_sanitaria, valid_from, valid_until);
 
         if (send(servv_sock, &green_pass, sizeof(green_pass), 0) < 0) {
             perror("Errore durante l'invio del codice della tessera sanitaria a ServerV");
