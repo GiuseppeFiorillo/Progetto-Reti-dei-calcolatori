@@ -6,7 +6,7 @@
 #define TESSERA_LENGTH 16
 
 struct GreenPass {
-    char tessera_sanitaria[TESSERA_LENGTH];
+    char tessera_sanitaria[TESSERA_LENGTH + 1];
     time_t valid_from;
     time_t valid_until;
 };
