@@ -5,9 +5,11 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 #include "green_pass.h"
+#include "header.h"
 
 #define CENTER_ADDRESS "127.0.0.1"
-#define CENTER_PORT 8888
+//#define CENTER_PORT 8888
+#define CENTER_PORT 1026
 
 int main() {
     /* Crea il file descriptor di un nuovo socket utilizzando il protocollo TCP (`SOCK_STREAM`).
@@ -25,7 +27,7 @@ int main() {
     center.sin_addr.s_addr = inet_addr(CENTER_ADDRESS); /* Assegna all'indirizzo IP del server (`sin_addr`)
     * il valore specificato nella costante `CENTER_ADDRESS`,
     * dopo averlo convertito in un formato numerico con la funzione `inet_addr` */
-    center.sin_port = htons(CENTER_PORT); // Con `htons` convertiamo la costante `CENTER_PORT` in un formato a 16 bit
+    center.sin_port = htons(CV_PORT); // Con `htons` convertiamo la costante `CENTER_PORT` in un formato a 16 bit
 
     /* Connessione con il server utilizzando la funzione `connect`. In caso di errore, la funzione restituisce un
      * valore negativo. Il secondo argomento richiesto è un puntatore a una struttura `sockaddr`.

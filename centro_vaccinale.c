@@ -9,6 +9,7 @@
 #include <signal.h>
 #include <errno.h>
 #include "green_pass.h"
+#include "header.h"
 
 #define CENTER_PORT 8888
 #define SERVERV_ADDRESS "127.0.0.1"
@@ -19,6 +20,9 @@ volatile sig_atomic_t isRunning = 1;
 
 void * handle_connection(void * arg);
 void sigint_handler(int sig);
+
+
+
 
 int main() {
     /* Imposto un gestore di segnale per il segnale SIGINT */
