@@ -9,6 +9,7 @@ struct GreenPass {
     char tessera_sanitaria[TESSERA_LENGTH + 1];
     time_t valid_from;
     time_t valid_until;
+    int service;
 };
 
 #endif //GREEN_PASS_GREEN_PASS_H

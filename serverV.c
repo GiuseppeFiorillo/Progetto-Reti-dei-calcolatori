@@ -1,87 +1,173 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <unistd.h>
-#include <stdbool.h>
-#include <string.h>
+#include <pthread.h>
+#include <signal.h>
+#include <errno.h>
 #include "green_pass.h"
 
 #define SERVERV_PORT 8890
-#define CENTER_PORT 8888
+#define THREAD_POOL_SIZE 10
+
+volatile sig_atomic_t isRunning = 1;
+pthread_mutex_t mutex;
+
+void * handle_connection(void * arg);
+void sigint_handler(int sig);
 
 int main() {
-    // Crea il file descriptor di un nuovo socket utilizzando il protocollo TCP (`SOCK_STREAM`)
-    int server_fd = socket(AF_INET, SOCK_STREAM, 0);
-    if (server_fd == -1) {
-        perror("Errore durante la creazione del socket");
+    int serverV_sock, client_sock;
+    struct sockaddr_in serverV_address, client_address;
+    socklen_t client_address_length;
+    pthread_t thread_pool[THREAD_POOL_SIZE];
+
+    struct sigaction sa;
+    sa.sa_handler = sigint_handler;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+    sigaction(SIGINT, &sa, NULL);
+
+    pthread_mutex_init(&mutex, NULL);
+
+    // create server socket
+    serverV_sock = socket(AF_INET, SOCK_STREAM, 0);
+    if (serverV_sock == -1) {
+        perror("Errore nella creazione del socket");
         exit(EXIT_FAILURE);
     }
 
-    // Inizializza la struttura `sockaddr_in` con i dati necessari per il server
-    struct sockaddr_in server_address;
-    server_address.sin_family = AF_INET; // Il tipo di connessione, `AF_INET` indica l'utilizzo del protocollo IPv4
-    server_address.sin_addr.s_addr = INADDR_ANY; // Utilizziamo l'indirizzo del server per accettare connessioni da qualsiasi indirizzo
-    server_address.sin_port = htons(SERVERV_PORT); // Con `htons` convertiamo la costante `CENTER_PORT` in un formato a 16 bit
-
-    // Assegna l'indirizzo al socket
-    if (bind(server_fd, (struct sockaddr *) &server_address, sizeof(server_address)) < 0) {
-        perror("Errore durante l'assegnazione dell'indirizzo al socket");
+    //bind server socket to a port
+    memset(&serverV_address, 0, sizeof(serverV_address));
+    serverV_address.sin_family = AF_INET;
+    serverV_address.sin_addr.s_addr = htonl(INADDR_ANY);
+    serverV_address.sin_port = htons(SERVERV_PORT);
+    if (bind(serverV_sock, (struct sockaddr *) &serverV_address, sizeof(serverV_address)) == -1) {
+        perror("Errore nel binding");
         exit(EXIT_FAILURE);
     }
 
-    // Si mette in ascolto di nuove connessioni
-    if (listen(server_fd, 10) < 0) { // Il secondo parametro indica il numero massimo di richieste di connessione pendenti
-        perror("Errore durante l'ascolto di nuove connessioni");
+    if (listen(serverV_sock, SOMAXCONN) == -1) {
+        perror("listen");
         exit(EXIT_FAILURE);
     }
 
-    // Accettiamo nuove connessioni in modo indefinito
-    while (1) {
-        struct sockaddr_in client_address;
-        int client_fd;
+    for (size_t i = 0; i < THREAD_POOL_SIZE; ++i) {
+        if (pthread_create(&thread_pool[i], NULL, handle_connection, NULL) != 0) {
+            perror("Errore nella creazione del thread");
+            exit(EXIT_FAILURE);
+        }
+    }
 
-        /* Accetta una connessione in arrivo e restituisce il file descriptor del socket dedicato alla nuova
-         * connessione. In caso di errore, la funzione restituisce un valore negativo. Il secondo argomento
-         * è un puntatore a una struttura `sockaddr`. */
-        int client_address_length = sizeof(client_address);
-        if ((client_fd = accept(server_fd, (struct sockaddr *) &client_address, (socklen_t *) &client_address_length)) < 0) {
+    while (isRunning) {
+        client_address_length = sizeof(client_address);
+        client_sock = accept(serverV_sock, (struct sockaddr *) &client_address, &client_address_length);
+        if (client_sock == -1) {
             perror("Errore durante la connessione di un nuovo client");
-            exit(EXIT_FAILURE);
+            continue;
         }
 
-        printf("Nuova connessione accettata\n");
-
-        struct GreenPass green_pass;
-
-        // Riceviamo il codice della tessera sanitaria dal client
-        if (recv(client_fd, &green_pass, sizeof(green_pass), 0) < 0) {
-            perror("Errore durante la ricezione del codice della tessera sanitaria dal client");
-            exit(EXIT_FAILURE);
-        }
-        // Controlliamo se il codice della tessera sanitaria è già stato inserito
-        bool tessera_sanitaria_presente = false;
-
-        // Apriamo il file in lettura e scrittura, in modo da poter salvare le informazioni dei green pass validi
-        FILE *green_pass_file = fopen("green_pass.txt", "r+");
-        if (green_pass_file == NULL) {
-            perror("Errore durante l'apertura del file");
-            exit(EXIT_FAILURE);
-        }
-
-        char line[TESSERA_LENGTH + 1];
-        while (fgets(line, sizeof(line), green_pass_file)) {
-            if (strncmp(line, green_pass.tessera_sanitaria, TESSERA_LENGTH) == 0) {
-                tessera_sanitaria_presente = true;
+        // find first available thread in pool
+        int thread_index = -1;
+        for (size_t i = 0; i < THREAD_POOL_SIZE; ++i) {
+            if (pthread_kill(thread_pool[i], 0) == ESRCH) {
+                // thread is available
+                thread_index = i;
                 break;
             }
         }
-        // Scriviamo le informazioni sul file solo se la tessera sanitaria non è già presente
-        if (!tessera_sanitaria_presente) {
-            green_pass_file = fopen("green_pass.txt", "a");
-            if (green_pass_file == NULL) {
-                perror("Errore durante l'apertura del file");
-                exit(EXIT_FAILURE);
+
+        if (thread_index == -1) {
+            // no threads availalbe, close connection
+            close(client_sock);
+        } else {
+            // pass client socket to thread
+            int * client_sock_ptr = malloc(sizeof(int));
+            *client_sock_ptr = client_sock;
+            if (pthread_create(&thread_pool[thread_index], NULL, handle_connection, client_sock_ptr) != 0) {
+                perror("Errore nella creazione del thread");
+                break;
+            } else {
+                // detach thread
+                if (pthread_detach(thread_pool[thread_index]) != 0) {
+                    perror("Errore nel detach");
+                    break;
+                }
+            }
+        }
+    }
+
+    pthread_mutex_destroy(&mutex);
+    close(client_sock);
+
+    return 0;
+}
+
+
+void * handle_connection(void * arg) {
+    int client_sock;
+    if (arg == NULL) {
+        // handle error
+        return NULL;
+    } else {
+        client_sock = *((int *) arg);
+        free(arg);
+    }
+
+    // Receive the struct from the client
+    struct GreenPass green_pass;
+
+    int bytes_received = recv(client_sock, &green_pass, sizeof(green_pass), 0);
+    if (bytes_received == -1) {
+        perror("Errore nella ricezione del green pass dal client");
+        close(client_sock);
+        return NULL;
+    } else if (bytes_received != sizeof(green_pass)) {
+        close(client_sock);
+        return NULL;
+    }
+
+    //lock mutex
+    if (pthread_mutex_lock(&mutex) != 0) {
+        perror("Errore nel lock del mutex");
+        close(client_sock);
+        return NULL;
+    }
+
+    // Open data file
+    FILE *green_pass_file = fopen("green_pass.txt", "rb+");
+    if (green_pass_file == NULL) {
+        perror("Errore durante l'apertura del file");
+        close(client_sock);
+        pthread_mutex_unlock(&mutex);
+        return NULL;
+    }
+
+    int response;
+    // Scrivi il green pass su file
+    switch (green_pass.service) {
+        case 0: {
+            rewind(green_pass_file);
+            char buffer[TESSERA_LENGTH + 1];
+            while (fgets(buffer, sizeof(buffer), green_pass_file)) {
+                if (strncmp(buffer, green_pass.tessera_sanitaria, TESSERA_LENGTH) == 0) {
+                    pthread_mutex_unlock(&mutex);
+                    fflush(green_pass_file);
+                    fclose(green_pass_file);
+
+                    response = 0;
+                    if (send(client_sock, &response, sizeof(int), 0) == -1) {
+                        perror("Errore nell'invio della risposta al client");
+                        close(client_sock);
+                        return NULL;
+                    }
+
+                    close(client_sock);
+                    return NULL;
+                }
             }
 
             struct tm *from_ptr = localtime(&green_pass.valid_from);
@@ -93,31 +179,23 @@ int main() {
             strftime(valid_until, sizeof(valid_until), "%d/%m/%Y", until_ptr);
             printf("%s : %s : %s\n", green_pass.tessera_sanitaria, valid_from, valid_until);
             fprintf(green_pass_file, "%s : %s : %s\n", green_pass.tessera_sanitaria, valid_from, valid_until);
+            fflush(green_pass_file);
         }
+    }
+    pthread_mutex_unlock(&mutex);
 
-        fclose(green_pass_file);
-
-        // Inviamo la risposta al client
-        int response = !tessera_sanitaria_presente;
-        if (send(client_fd, &response, sizeof(response), 0) < 0) {
-            perror("Errore durante l'invio della risposta al client");
-            exit(EXIT_FAILURE);
-        }
-
-        close(client_fd);
+    response = 1;
+    if (send(client_sock, &response, sizeof(int), 0) == -1) {
+        perror("Errore nell'invio della risposta al client");
+        close(client_sock);
+        return NULL;
     }
 
-    close(server_fd);
-    return 0;
+    fclose(green_pass_file);
+    close(client_sock);
+    return NULL;
 }
 
-/* Funzione che si occupa di verificare se un green pass è valido. Riceve in ingresso un oggetto GreenPass
- * e restituisce un intero: uno se il green pass è valido, zero altrimenti. */
-/*int check_green_pass(struct GreenPass green_pass) {
-    time_t current_time;
-    time(&current_time);
-    if (current_time < green_pass.valid_from || current_time > green_pass.valid_until) {
-        return 0;
-    }
-    return 1;
-}*/
+void sigint_handler(int sig) {
+    isRunning = 0;
+}
