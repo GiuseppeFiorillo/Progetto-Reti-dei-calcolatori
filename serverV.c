@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdbool.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <unistd.h>
@@ -173,6 +174,14 @@ void * handle_connection(void * arg) {
             fprintf(green_pass_file, "%s : %s : %s\n", green_pass.tessera_sanitaria, valid_from, valid_until);
             fflush(green_pass_file);
         }
+        case CHECK_GP:
+            //....
+
+        case VALIDATION_GP:
+            //....
+
+        default:
+            //...
     }
     /* Unlock del mutex */
     pthread_mutex_unlock(&mutex);

@@ -166,14 +166,14 @@ void * handle_connection(void * arg) {
     printf("response: %d\n", response);
     if (response) {
         /* Nel caso in cui `response` valga 1, allora comunica l'avvenuta creazione del Green Pass al client */
-        if (send(client_sock, "success", sizeof("success"), 0) == -1) {
+        if (send(client_sock, &response, sizeof(int), 0) == -1) {
             perror("Errore durante l'invio della risposta al client");
             close(client_sock);
             close(serverV_sock);
             return NULL;
         } else {
             /* Nel caso in cui invece valga 0, comunica che il Green Pass esiste al client */
-            if (send(client_sock, "already exists", sizeof("already exists"), 0) == -1) {
+            if (send(client_sock, &response, sizeof(int), 0) == -1) {
                 perror("Errore durante l'invio della risposta al client");
                 close(client_sock);
                 close(serverV_sock);
