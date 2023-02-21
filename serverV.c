@@ -1,22 +1,28 @@
-//
-// Created by raffaele on 21/02/23.
-//
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+#include <pthread.h>
+#include <signal.h>
+#include <errno.h>
+#include "green_pass.h"
 
-#include "header.h"
+#define SERVERV_PORT 8890
+#define THREAD_POOL_SIZE 10
 
-volatile sig_atomic_t running = 1;
-
-void *handle_connection(void *);
-void sigint_handler(int);
-void delete_row(const char*, const char*);
-
+volatile sig_atomic_t isRunning = 1;
 pthread_mutex_t mutex;
 
+void * handle_connection(void * arg);
+void sigint_handler(int sig);
 
-int main(int argc, char *argv[]) {
-    int server_socket, client_socket;
-    struct sockaddr_in server_address, client_address;
-    socklen_t client_address_len;
+int main() {
+    int serverV_sock, client_sock;
+    struct sockaddr_in serverV_address, client_address;
+    socklen_t client_address_length;
     pthread_t thread_pool[THREAD_POOL_SIZE];
 
     struct sigaction sa;
@@ -25,55 +31,48 @@ int main(int argc, char *argv[]) {
     sa.sa_flags = 0;
     sigaction(SIGINT, &sa, NULL);
 
-
     pthread_mutex_init(&mutex, NULL);
 
     // create server socket
-    server_socket = socket(AF_INET, SOCK_STREAM, 0);
-    if (server_socket == -1) {
-        perror("socket");
-        exit(1);
+    serverV_sock = socket(AF_INET, SOCK_STREAM, 0);
+    if (serverV_sock == -1) {
+        perror("Errore nella creazione del socket");
+        exit(EXIT_FAILURE);
     }
 
-
-    // bind server socket to a port
-    bzero(&server_address, sizeof(server_address));
-    server_address.sin_family = AF_INET;
-    server_address.sin_addr.s_addr = htonl(INADDR_ANY); // listen on all available network interfaces
-    server_address.sin_port = htons(SERVER_V_PORT); // listen on port 1024
-    if (bind(server_socket, (SA *) &server_address, sizeof(server_address)) == -1) {
-        perror("bind");
-        exit(2);
+    //bind server socket to a port
+    memset(&serverV_address, 0, sizeof(serverV_address));
+    serverV_address.sin_family = AF_INET;
+    serverV_address.sin_addr.s_addr = htonl(INADDR_ANY);
+    serverV_address.sin_port = htons(SERVERV_PORT);
+    if (bind(serverV_sock, (struct sockaddr *) &serverV_address, sizeof(serverV_address)) == -1) {
+        perror("Errore nel binding");
+        exit(EXIT_FAILURE);
     }
 
-    // listen for connections
-    if (listen(server_socket, SOMAXCONN) == -1) {
+    if (listen(serverV_sock, SOMAXCONN) == -1) {
         perror("listen");
-        exit(3);
+        exit(EXIT_FAILURE);
     }
 
-    printf("server V listening on port %d\n", SERVER_V_PORT);
-
-    // initialize thread pool
-    for (int i = 0; i < THREAD_POOL_SIZE; i++) {
+    for (size_t i = 0; i < THREAD_POOL_SIZE; ++i) {
         if (pthread_create(&thread_pool[i], NULL, handle_connection, NULL) != 0) {
-            perror("pthread_create");
-            exit(1);
+            perror("Errore nella creazione del thread");
+            exit(EXIT_FAILURE);
         }
     }
 
-    // wait for connections and assign to threads in pool
-    while (running) {
-        client_address_len = sizeof(client_address);
-        client_socket = accept(server_socket, (struct sockaddr *) &client_address, &client_address_len);
-        if (client_socket == -1) {
-            perror("accept");
+    while (isRunning) {
+        client_address_length = sizeof(client_address);
+        client_sock = accept(serverV_sock, (struct sockaddr *) &client_address, &client_address_length);
+        if (client_sock == -1) {
+            perror("Errore durante la connessione di un nuovo client");
             continue;
         }
 
         // find first available thread in pool
         int thread_index = -1;
-        for (int i = 0; i < THREAD_POOL_SIZE; i++) {
+        for (size_t i = 0; i < THREAD_POOL_SIZE; ++i) {
             if (pthread_kill(thread_pool[i], 0) == ESRCH) {
                 // thread is available
                 thread_index = i;
@@ -82,19 +81,19 @@ int main(int argc, char *argv[]) {
         }
 
         if (thread_index == -1) {
-            // no threads available, close connection
-            close(client_socket);
+            // no threads availalbe, close connection
+            close(client_sock);
         } else {
             // pass client socket to thread
-            int *client_socket_ptr = malloc(sizeof(int));
-            *client_socket_ptr = client_socket;
-            if (pthread_create(&thread_pool[thread_index], NULL, handle_connection, client_socket_ptr) != 0) {
-                perror("pthread_create");
+            int * client_sock_ptr = malloc(sizeof(int));
+            *client_sock_ptr = client_sock;
+            if (pthread_create(&thread_pool[thread_index], NULL, handle_connection, client_sock_ptr) != 0) {
+                perror("Errore nella creazione del thread");
                 break;
             } else {
-                // detach thread so it can run in the background
+                // detach thread
                 if (pthread_detach(thread_pool[thread_index]) != 0) {
-                    perror("pthread_detach");
+                    perror("Errore nel detach");
                     break;
                 }
             }
@@ -102,210 +101,101 @@ int main(int argc, char *argv[]) {
     }
 
     pthread_mutex_destroy(&mutex);
-    close(client_socket);
+    close(client_sock);
 
     return 0;
 }
 
 
-void *handle_connection(void *arg) {
-    int client_socket;
+void * handle_connection(void * arg) {
+    int client_sock;
     if (arg == NULL) {
         // handle error
         return NULL;
     } else {
-        client_socket = *((int *) arg);
+        client_sock = *((int *) arg);
         free(arg);
     }
 
     // Receive the struct from the client
-    struct green_pass gp;
+    struct GreenPass green_pass;
 
-    int bytes_received = recv(client_socket, &gp, sizeof(gp), 0);
+    int bytes_received = recv(client_sock, &green_pass, sizeof(green_pass), 0);
     if (bytes_received == -1) {
-        perror("recv");
-        close(client_socket);
+        perror("Errore nella ricezione del green pass dal client");
+        close(client_sock);
         return NULL;
-    } else if (bytes_received != sizeof(gp)) {
-        close(client_socket);
+    } else if (bytes_received != sizeof(green_pass)) {
+        close(client_sock);
         return NULL;
     }
 
     //lock mutex
     if (pthread_mutex_lock(&mutex) != 0) {
-        perror("pthread_mutex_lock");
-        close(client_socket);
+        perror("Errore nel lock del mutex");
+        close(client_sock);
         return NULL;
     }
 
     // Open data file
-    FILE *fp = fopen(FILE_NAME, "rb+");
-    if (fp == NULL) {
-        perror("fopen");
-        close(client_socket);
+    FILE *green_pass_file = fopen("green_pass.txt", "rb+");
+    if (green_pass_file == NULL) {
+        perror("Errore durante l'apertura del file");
+        close(client_sock);
         pthread_mutex_unlock(&mutex);
         return NULL;
     }
 
-    if (gp.service == SERVICE_VALIDITY_GP) {
-        printf("service requested : validity\n");
-        // Find the corresponding code in the file
-        fseek(fp, 0, SEEK_SET);
-        char line[100];
-        long int offset = 0;
-        while (fgets(line, sizeof(line), fp) != NULL) {
-            if (strncmp(line, gp.card, TESSERA_SANITARIA_LEN) == 0) {
-                // Found the corresponding code
-                int validity = line[strlen(line) - 2] - '0';
-                int new_validity = validity == 1 ? 0 : 1;
-                offset = -2;
-                fseek(fp, offset, SEEK_CUR);
-                fprintf(fp, "%d\n", new_validity);
-                fflush(fp);
-                break;
-            }
-        }
-    }
+    int response;
+    // Scrivi il green pass su file
+    switch (green_pass.service) {
+        case 0: {
+            rewind(green_pass_file);
+            char buffer[TESSERA_LENGTH + 1];
+            while (fgets(buffer, sizeof(buffer), green_pass_file)) {
+                if (strncmp(buffer, green_pass.tessera_sanitaria, TESSERA_LENGTH) == 0) {
+                    pthread_mutex_unlock(&mutex);
+                    fflush(green_pass_file);
+                    fclose(green_pass_file);
 
-        //service : 1 - search the code in the file
-    else if (gp.service == SERVICE_READ_GP) {
-        int found = FALSE;
-
-        printf("service requested : read\n");
-        char line[TESSERA_SANITARIA_LEN + EXPIRATION_DATE_LEN + 3];
-        while (fgets(line, TESSERA_SANITARIA_LEN + EXPIRATION_DATE_LEN + 3, fp) != NULL) {
-
-            // Extract the code and expiration date from the line
-            char code[TESSERA_SANITARIA_LEN + 1];
-            int day, month, year;
-            int n_items = sscanf(line, "%[^:/]:%d/%d/%d", code, &day, &month, &year);
-            if (n_items != 4) {
-                continue;  // Invalid line, skip it
-            }
-
-            if (strcmp(code, gp.card) == 0) {
-                printf("Code found\n");
-                found = TRUE;
-                // Code found, check if it's still valid
-                char* last_char = line + strlen(line) - 1;
-                printf("last char: %c\n", *last_char);
-                if(*last_char == '1') {
-                    time_t now = time(NULL);
-                    struct tm *tm_struct = localtime(&now);
-                    tm_struct->tm_mday = day;
-                    tm_struct->tm_mon = month - 1;
-                    tm_struct->tm_year = year - 1900;
-                    time_t expiry_time = mktime(tm_struct);
-
-                    if (expiry_time < now) {
-                        // Code expired, send response to client
-                        if (send(client_socket, "EXPIRED", 7, 0) == -1) {
-                            perror("send");
-                            fclose(fp);
-                            close(client_socket);
-                            pthread_mutex_unlock(&mutex);
-                            return NULL;
-                        }
-                        fclose(fp);
-                        close(client_socket);
-                        pthread_mutex_unlock(&mutex);
-                        return NULL;
-                    } else {
-                        // Code still valid, send response to client
-                        if (send(client_socket, "VALID", 5, 0) == -1) {
-                            perror("send");
-                            fclose(fp);
-                            close(client_socket);
-                            pthread_mutex_unlock(&mutex);
-                            return NULL;
-                        }
-                        fclose(fp);
-                        close(client_socket);
-                        pthread_mutex_unlock(&mutex);
+                    response = 0;
+                    if (send(client_sock, &response, sizeof(int), 0) == -1) {
+                        perror("Errore nell'invio della risposta al client");
+                        close(client_sock);
                         return NULL;
                     }
-                } else {
-                    if (send(client_socket, "NOT VALID", 9, 0) == -1) {
-                        perror("send");
-                        fclose(fp);
-                        close(client_socket);
-                        pthread_mutex_unlock(&mutex);
-                        return NULL;
-                    }
-                }
-            }
-        }
 
-        if(!found) {
-            // Code not found, send response to client
-            if (send(client_socket, "NOT FOUND", 9, 0) == -1) {
-                perror("send");
-                fclose(fp);
-                close(client_socket);
-                pthread_mutex_unlock(&mutex);
-                return NULL;
-            }
-        }
-    }
-
-        //service : 0 - write the code in the file
-    else {
-        printf("service requested : write\n");
-
-        // Check if the code already exists in the file
-        rewind(fp);
-        char line[TESSERA_SANITARIA_LEN + EXPIRATION_DATE_LEN + 1];
-        while (fgets(line, TESSERA_SANITARIA_LEN + EXPIRATION_DATE_LEN + 1, fp) != NULL) {
-            char code[TESSERA_SANITARIA_LEN + 1];
-            int n_items = sscanf(line, "%[^:/]:", code);
-            if (n_items != 1) {
-                continue; // Invalid line, skip it
-            }
-            if (strcmp(code, gp.card) == 0) {
-                printf("given code already exists\n");
-                pthread_mutex_unlock(&mutex);
-                fflush(fp);
-                fclose(fp);
-
-                int response = 0;
-                if (send(client_socket, &response, sizeof(int), 0) == -1) {
-                    perror("send");
-                    close(client_socket);
-                    close(client_socket);
+                    close(client_sock);
                     return NULL;
                 }
-
-                close(client_socket);
-                return NULL;
             }
+
+            struct tm *from_ptr = localtime(&green_pass.valid_from);
+            struct tm *until_ptr = localtime(&green_pass.valid_until);
+
+            char valid_from[11];
+            strftime(valid_from, sizeof(valid_from), "%d/%m/%Y", from_ptr);
+            char valid_until[11];
+            strftime(valid_until, sizeof(valid_until), "%d/%m/%Y", until_ptr);
+            printf("%s : %s : %s\n", green_pass.tessera_sanitaria, valid_from, valid_until);
+            fprintf(green_pass_file, "%s : %s : %s\n", green_pass.tessera_sanitaria, valid_from, valid_until);
+            fflush(green_pass_file);
         }
-
-        // Compute the actual expiry date based on the validity time left
-        time_t now = time(NULL);
-        time_t expiry_time = now + gp.expiration_date;
-        struct tm *tm_struct = localtime(&expiry_time);
-
-        // Write the code and expiry date to the end of the file
-        fseek(fp, 0, SEEK_END);
-        fprintf(fp, "%s:%d/%d/%d\n", gp.card, tm_struct->tm_mday, tm_struct->tm_mon + 1, tm_struct->tm_year + 1900);
-        fflush(fp);
     }
-
     pthread_mutex_unlock(&mutex);
 
-    int response = 1;
-    if (send(client_socket, &response, sizeof(int), 0) == -1) {
-        perror("send");
-        close(client_socket);
+    response = 1;
+    if (send(client_sock, &response, sizeof(int), 0) == -1) {
+        perror("Errore nell'invio della risposta al client");
+        close(client_sock);
         return NULL;
     }
 
-
-    fclose(fp);
-    close(client_socket);
+    fclose(green_pass_file);
+    close(client_sock);
     return NULL;
 }
 
 void sigint_handler(int sig) {
-    running = 0;
+    isRunning = 0;
 }
