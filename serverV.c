@@ -31,7 +31,7 @@ int main() {
     }
 
     // Si mette in ascolto di nuove connessioni
-    if (listen(server_fd, 10) < 0) { // Il secondo parametro indica il numero massimo di richieste di connessione pendenti
+    if (listen(server_fd, 1024) < 0) { // Il secondo parametro indica il numero massimo di richieste di connessione pendenti
         perror("Errore durante l'ascolto di nuove connessioni");
         exit(EXIT_FAILURE);
     }
@@ -63,7 +63,7 @@ int main() {
         bool tessera_sanitaria_presente = false;
 
         // Apriamo il file in lettura e scrittura, in modo da poter salvare le informazioni dei green pass validi
-        FILE *green_pass_file = fopen("green_pass.txt", "r+");
+        FILE *green_pass_file = fopen("green_pass.txt", "w+");
         if (green_pass_file == NULL) {
             perror("Errore durante l'apertura del file");
             exit(EXIT_FAILURE);
@@ -104,7 +104,7 @@ int main() {
             exit(EXIT_FAILURE);
         }
 
-        close(client_fd);
+        //close(client_fd);
     }
 
     close(server_fd);

@@ -4,10 +4,14 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 #include "green_pass.h"
+#include "header.h"
 
 #define SERVERV_ADDRESS "127.0.0.1"
 #define SERVERV_PORT 8890
 #define CENTER_PORT 8888
+
+
+
 
 int main() {
     /* Crea il file descriptor di un nuovo socket utilizzando il protocollo TCP (`SOCK_STREAM`).
