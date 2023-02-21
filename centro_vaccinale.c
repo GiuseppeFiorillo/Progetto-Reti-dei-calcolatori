@@ -1,7 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-//#include <ctype.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <unistd.h>
@@ -9,17 +8,14 @@
 #include <signal.h>
 #include <errno.h>
 #include "green_pass.h"
+#include "addresses.h"
 
-#define CENTER_PORT 8888
-#define SERVERV_ADDRESS "127.0.0.1"
-#define SERVERV_PORT 8890
 #define THREAD_POOL_SIZE 10
 
 volatile sig_atomic_t isRunning = 1;
 
 void * handle_connection(void * arg);
 void sigint_handler(int sig);
-
 
 int main() {
     /* Imposto un gestore di segnale per il segnale SIGINT */
@@ -127,7 +123,7 @@ void * handle_connection(void * arg) {
     /* Imposta la data d'inizio e di fine del GreenPass */
     green_pass.valid_from = time(NULL);
     green_pass.valid_until = (time(NULL) + 30 * 24 * 60 * 60);
-    green_pass.service = 0;
+    green_pass.service = WRITE_GP;
     /* Crea il file descriptor di un nuovo socket utilizzando il protocollo TCP (`SOCK_STREAM`).
      * In caso di errore, la funzione socket restituisce -1 */
     int serverV_sock = socket(AF_INET, SOCK_STREAM, 0);
@@ -140,7 +136,7 @@ void * handle_connection(void * arg) {
     struct sockaddr_in serverV_address;
     memset(&serverV_address, 0, sizeof(serverV_address));
     serverV_address.sin_family = AF_INET; // Il tipo di connessione, `AF_INET` indica l'utilizzo del protocollo IPv4
-    serverV_address.sin_addr.s_addr = inet_addr(SERVERV_ADDRESS);
+    serverV_address.sin_addr.s_addr = inet_addr(LOCAL_HOST);
     serverV_address.sin_port = htons(SERVERV_PORT); /* Con `htons` convertiamo la costante `SERVERV_PORT`
     * in un formato a 16 bit */
 

@@ -1,7 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-//#include <ctype.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <unistd.h>
@@ -9,8 +8,8 @@
 #include <signal.h>
 #include <errno.h>
 #include "green_pass.h"
+#include "addresses.h"
 
-#define SERVERV_PORT 8890
 #define THREAD_POOL_SIZE 10
 
 volatile sig_atomic_t isRunning = 1;
@@ -134,7 +133,7 @@ void * handle_connection(void * arg) {
         return NULL;
     }
     /* Apre un file di testo per eseguire delle operazioni di lettura e scrittura */
-    FILE *green_pass_file = fopen("green_pass.txt", "w+");
+    FILE *green_pass_file = fopen("green_pass.txt", "a+");
     if (green_pass_file == NULL) {
         perror("Errore durante l'apertura del file");
         close(client_sock);
@@ -144,7 +143,7 @@ void * handle_connection(void * arg) {
     int response;
     /* Scrittura del GreenPass sul file */
     switch (green_pass.service) {
-        case 0: {
+        case WRITE_GP: {
             rewind(green_pass_file); // riavvolge il file fino all'inizio
             char buffer[TESSERA_LENGTH + 1]; // buffer per leggere le righe del file
             while (fgets(buffer, sizeof(buffer), green_pass_file)) { // legge ogni riga del file fino alla fine
