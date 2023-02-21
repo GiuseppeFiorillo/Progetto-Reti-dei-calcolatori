@@ -17,7 +17,6 @@ int main() {
         perror("Errore durante la creazione del socket");
         exit(EXIT_FAILURE);
     }
-
     /* Inizializzazione di una struttura `sockaddr_in` con i dati necessari
      * per stabilire la connessione con il centro vaccinale */
     struct sockaddr_in center;
@@ -35,38 +34,33 @@ int main() {
         perror("Errore durante la connessione al server");
         exit(EXIT_FAILURE);
     }
-
     struct GreenPass green_pass;
     printf("Inserire il codice della tesseria sanitaria (16 caratteri): ");
     scanf("%s", green_pass.tessera_sanitaria);
     getchar();
-
     // Convertiamo la stringa ricevuta in una maiuscola
     for (size_t i = 0; green_pass.tessera_sanitaria[i] != '\0'; i++) {
         green_pass.tessera_sanitaria[i] = toupper(green_pass.tessera_sanitaria[i]);
     }
-
     /* Invia il codice della tessera sanitaria al centro vaccinale. Lo zero come ultimo argomento specifica
      * di non usare opzioni particolari per l'invio. */
     if (send(sock, &green_pass, sizeof(green_pass), 0) < 0) {
         perror("Errore durante l'invio del codice della tessera sanitaria al centro vaccinale");
         exit(EXIT_FAILURE);
     }
-
     // Riceve la risposta dal centro vaccinale
     int response;
     if (recv(sock, &response, sizeof(response), 0) < 0) {
         perror("Errore durante la ricezione della risposta dal centro vaccinale");
         exit(EXIT_FAILURE);
     }
-
+    // Controlla se il Green Pass è valido o meno
     if (response == 0) {
         printf("Green pass non valido\n");
     } else {
         printf("Green pass valido\n");
     }
-
+    // Chiude la connessione con la socket
     close(sock);
-
     return 0;
 }
