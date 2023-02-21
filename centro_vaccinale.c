@@ -9,7 +9,6 @@
 #include <signal.h>
 #include <errno.h>
 #include "green_pass.h"
-#include "header.h"
 
 #define CENTER_PORT 8888
 #define SERVERV_ADDRESS "127.0.0.1"
