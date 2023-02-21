@@ -6,6 +6,7 @@
 #define TESSERA_LENGTH 16
 #define WRITE_GP 0
 #define CHECK_GP 1
+#define VALIDATION_GP 2
 
 struct GreenPass {
     char tessera_sanitaria[TESSERA_LENGTH + 1];
