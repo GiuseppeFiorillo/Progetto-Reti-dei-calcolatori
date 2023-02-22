@@ -143,7 +143,7 @@ void * handle_connection(void * arg) {
     }
     int response;
     switch (green_pass.service) {
-        /* Scrittura del GreenPass sul file */
+        /* Servizio di scrittura di un Green Pass sul file */
         case WRITE_GP: {
             rewind(green_pass_file); // riavvolge il file fino all'inizio
             char buffer[TESSERA_LENGTH + 1]; // buffer per leggere le righe del file
@@ -175,7 +175,7 @@ void * handle_connection(void * arg) {
             fflush(green_pass_file);
             break;
         }
-        /* Controllo di validità del green pass */
+        /* Servizio di controllo della validità di un green pass */
         case CHECK_GP: {
             int response;
             bool isHere = false;
@@ -185,20 +185,15 @@ void * handle_connection(void * arg) {
                 char tmpTessera[TESSERA_LENGTH + 1];
                 int day, month, year;
                 buffer[strlen(buffer) - 1] = '\0';
-                printf("buffer: %s\n", buffer);
                 int items = sscanf(buffer, "%[^ ] : %*d/%*d/%*d : %d/%d/%d : %*d", tmpTessera, &day, &month, &year);
-                printf("%s\n", tmpTessera);
-                printf("Items: %d\n", items);
                 if (items != 4) {
                     continue; // La linea considerata non è valida, pertanto la saltiamo
                 }
 
-                //printf("prova\n");
                 if (strncmp(tmpTessera, green_pass.tessera_sanitaria, TESSERA_LENGTH) == 0) {
                     isHere = true;
                     char * isValid = buffer + strlen(buffer) - 1;
                     if (*isValid == '1') {
-                        printf("entra\n");
                         time_t now = time(NULL);
                         struct tm * expiry_date_struct = localtime(&now);
                         expiry_date_struct->tm_year = year - 1900;
@@ -206,10 +201,8 @@ void * handle_connection(void * arg) {
                         expiry_date_struct->tm_mday = day;
                         time_t expiry_date = mktime(expiry_date_struct);
 
-                        printf("cazo\n");
                         if (expiry_date < now) {
                             response = 0;
-                            printf("entro nell'if\n");
                             // Il green pass è scaduto
                             if (send(client_sock, &response, sizeof(int), 0) == -1) {
                                 perror("Errore nell'invio della risposta al serverG");
@@ -218,6 +211,7 @@ void * handle_connection(void * arg) {
                                 pthread_mutex_unlock(&mutex);
                                 return NULL;
                             }
+
                             fclose(green_pass_file);
                             close(client_sock);
                             pthread_mutex_unlock(&mutex);
@@ -263,19 +257,15 @@ void * handle_connection(void * arg) {
             }
             break;
         }
-
+        /* Servizio di validazione e invalidazione di un Green Pass */
         case VALIDATION_GP: {
             char buffer[64];
             rewind(green_pass_file);
             long int offset = 0;
-
             while (fgets(buffer, sizeof(buffer), green_pass_file) != NULL) {
-                printf("Prova\n");
-                printf("buffer: %s", buffer);
                 if (strncmp(buffer, green_pass.tessera_sanitaria, TESSERA_LENGTH) == 0) {
                     // Trovata corrispondenza tra la stringa del buffer e quella presente nel file
                     int isValid = buffer[strlen(buffer) - 2] - '0';
-                    printf("isValid: %d\n", isValid);
                     isValid = isValid == 1 ? 0 : 1;
                     offset = -2;
                     fseek(green_pass_file, offset, SEEK_CUR);
@@ -286,7 +276,6 @@ void * handle_connection(void * arg) {
             }
             break;
         }
-        // default
     }
     /* Unlock del mutex */
     pthread_mutex_unlock(&mutex);
