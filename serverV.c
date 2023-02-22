@@ -164,23 +164,12 @@ void * handle_connection(void * arg) {
                 }
             }
             /* Formatta le date di validità del GreenPass */
-            struct tm *from_ptr = localtime(&green_pass.valid_from);
-            struct tm *until_ptr = localtime(&green_pass.valid_until);
-            /*
-    *
-    *
-    *
-    *
-    *
-    *
-    *
-    *
-    */
-
+            struct tm *tm_ptr = localtime(&green_pass.valid_from);
             char valid_from[11];
-            strftime(valid_from, sizeof(valid_from), "%d/%m/%Y", from_ptr);
+            strftime(valid_from, sizeof(valid_from), "%d/%m/%Y", tm_ptr);
+            tm_ptr = localtime(&green_pass.valid_until);
             char valid_until[11];
-            strftime(valid_until, sizeof(valid_until), "%d/%m/%Y", until_ptr);
+            strftime(valid_until, sizeof(valid_until), "%d/%m/%Y", tm_ptr);
             printf("%s : %s : %s\n", green_pass.tessera_sanitaria, valid_from, valid_until);
             fprintf(green_pass_file, "%s : %s : %s : 1\n", green_pass.tessera_sanitaria, valid_from, valid_until);
             fflush(green_pass_file);
