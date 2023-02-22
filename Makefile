@@ -3,7 +3,7 @@ CC = gcc
 # abilita tutti i warning del compilatore
 CFLAGS = -g -Wall
 
-all : client clientT clientS centro_vaccinale serverV serverG
+all : clean client clientT clientS centro_vaccinale serverV serverG
 
 client : client.c green_pass.h addresses.h wrapped.h
 	$(CC) $(CFLAGS) client.c -o client

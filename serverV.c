@@ -134,7 +134,7 @@ void * handle_connection(void * arg) {
         return NULL;
     }
     /* Apre un file di testo per eseguire delle operazioni di lettura e scrittura */
-    FILE *green_pass_file = fopen("green_pass.txt", "a+");
+    FILE *green_pass_file = fopen("green_pass.txt", "r+");
     if (green_pass_file == NULL) {
         perror("Errore durante l'apertura del file");
         close(client_sock);
@@ -142,8 +142,8 @@ void * handle_connection(void * arg) {
         return NULL;
     }
     int response;
-    /* Scrittura del GreenPass sul file */
     switch (green_pass.service) {
+        /* Scrittura del GreenPass sul file */
         case WRITE_GP: {
             rewind(green_pass_file); // riavvolge il file fino all'inizio
             char buffer[TESSERA_LENGTH + 1]; // buffer per leggere le righe del file
@@ -166,22 +166,138 @@ void * handle_connection(void * arg) {
             /* Formatta le date di validità del GreenPass */
             struct tm *from_ptr = localtime(&green_pass.valid_from);
             struct tm *until_ptr = localtime(&green_pass.valid_until);
+            /*
+    *
+    *
+    *
+    *
+    *
+    *
+    *
+    *
+    */
+
             char valid_from[11];
             strftime(valid_from, sizeof(valid_from), "%d/%m/%Y", from_ptr);
             char valid_until[11];
             strftime(valid_until, sizeof(valid_until), "%d/%m/%Y", until_ptr);
             printf("%s : %s : %s\n", green_pass.tessera_sanitaria, valid_from, valid_until);
-            fprintf(green_pass_file, "%s : %s : %s\n", green_pass.tessera_sanitaria, valid_from, valid_until);
+            fprintf(green_pass_file, "%s : %s : %s : 1\n", green_pass.tessera_sanitaria, valid_from, valid_until);
             fflush(green_pass_file);
+            break;
         }
-        case CHECK_GP:
-            //....
+        /* Controllo di validità del green pass */
+        case CHECK_GP: {
+            int response;
+            bool isHere = false;
+            char buffer[64];
 
-        case VALIDATION_GP:
-            //....
+            while (fgets(buffer, sizeof(buffer), green_pass_file) != NULL) {
+                char tmpTessera[TESSERA_LENGTH + 1];
+                int day, month, year;
+                buffer[strlen(buffer) - 1] = '\0';
+                printf("buffer: %s\n", buffer);
+                int items = sscanf(buffer, "%[^ ] : %*d/%*d/%*d : %d/%d/%d : %*d", tmpTessera, &day, &month, &year);
+                printf("%s\n", tmpTessera);
+                printf("Items: %d\n", items);
+                if (items != 4) {
+                    continue; // La linea considerata non è valida, pertanto la saltiamo
+                }
 
-        default:
-            //...
+                //printf("prova\n");
+                if (strncmp(tmpTessera, green_pass.tessera_sanitaria, TESSERA_LENGTH) == 0) {
+                    isHere = true;
+                    char * isValid = buffer + strlen(buffer) - 1;
+                    if (*isValid == '1') {
+                        printf("entra\n");
+                        time_t now = time(NULL);
+                        struct tm * expiry_date_struct = localtime(&now);
+                        expiry_date_struct->tm_year = year - 1900;
+                        expiry_date_struct->tm_mon = month - 1;
+                        expiry_date_struct->tm_mday = day;
+                        time_t expiry_date = mktime(expiry_date_struct);
+
+                        printf("cazo\n");
+                        if (expiry_date < now) {
+                            response = 0;
+                            printf("entro nell'if\n");
+                            // Il green pass è scaduto
+                            if (send(client_sock, &response, sizeof(int), 0) == -1) {
+                                perror("Errore nell'invio della risposta al serverG");
+                                fclose(green_pass_file);
+                                close(client_sock);
+                                pthread_mutex_unlock(&mutex);
+                                return NULL;
+                            }
+                            fclose(green_pass_file);
+                            close(client_sock);
+                            pthread_mutex_unlock(&mutex);
+                            return NULL;
+                        } else {
+                            response = 1;
+                            // Il green pass è valido
+                            if (send(client_sock, &response, sizeof(int), 0) == -1) {
+                                perror("Errore nell'invio della risposta al serverG");
+                                fclose(green_pass_file);
+                                close(client_sock);
+                                pthread_mutex_unlock(&mutex);
+                                return NULL;
+                            }
+                            fclose(green_pass_file);
+                            close(client_sock);
+                            pthread_mutex_unlock(&mutex);
+                            return NULL;
+                        }
+
+                    } else {
+                        response = -1;
+                        if (send(client_sock, &response, sizeof(int), 0) == -1) {
+                            perror("Errore nell'invio della risposta al serverG");
+                            fclose(green_pass_file);
+                            close(client_sock);
+                            pthread_mutex_unlock(&mutex);
+                            return NULL;
+                        }
+                    }
+                }
+            }
+
+            if (!isHere) {
+                response = -2;
+                if (send(client_sock, &response, sizeof(int), 0) == -1) {
+                    perror("Errore nell'invio della risposta al serverG");
+                    fclose(green_pass_file);
+                    close(client_sock);
+                    pthread_mutex_unlock(&mutex);
+                    return NULL;
+                }
+            }
+            break;
+        }
+
+        case VALIDATION_GP: {
+            char buffer[64];
+            rewind(green_pass_file);
+            long int offset = 0;
+
+            while (fgets(buffer, sizeof(buffer), green_pass_file) != NULL) {
+                printf("Prova\n");
+                printf("buffer: %s", buffer);
+                if (strncmp(buffer, green_pass.tessera_sanitaria, TESSERA_LENGTH) == 0) {
+                    // Trovata corrispondenza tra la stringa del buffer e quella presente nel file
+                    int isValid = buffer[strlen(buffer) - 2] - '0';
+                    printf("isValid: %d\n", isValid);
+                    isValid = isValid == 1 ? 0 : 1;
+                    offset = -2;
+                    fseek(green_pass_file, offset, SEEK_CUR);
+                    fprintf(green_pass_file, "%d\n", isValid);
+                    fflush(green_pass_file);
+                    break;
+                }
+            }
+            break;
+        }
+        // default
     }
     /* Unlock del mutex */
     pthread_mutex_unlock(&mutex);

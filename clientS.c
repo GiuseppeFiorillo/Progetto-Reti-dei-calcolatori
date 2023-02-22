@@ -53,10 +53,15 @@ int main(int argc, char * argv[]) {
     }
 
     // Controlla se il Green Pass è valido o meno
+    printf("%d\n", response);
     if (response == 0) {
+        printf("Green pass scaduto\n");
+    } else if (response == 1) {
+        printf("Green pass valido\n");
+    } else if (response == -1){
         printf("Green pass non valido\n");
     } else {
-        printf("Green pass valido\n");
+        printf("Green pass non trovato\n");
     }
 
     close(client_sock);

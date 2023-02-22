@@ -52,7 +52,6 @@ int main() {
         exit(EXIT_FAILURE);
     }
 
-
     // initialize thread pool
     for (int i = 0; i < THREAD_POOL_SIZE; i++) {
         if (pthread_create(&thread_pool[i], NULL, handle_connection, NULL) != 0) {

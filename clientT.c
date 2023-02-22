@@ -35,6 +35,9 @@ int main(int argc, char * argv[]) {
 
     struct GreenPass green_pass;
     strncpy(green_pass.tessera_sanitaria, argv[1], TESSERA_LENGTH);
+    for (size_t i = 0; green_pass.tessera_sanitaria[i] != '\0'; ++i) {
+        green_pass.tessera_sanitaria[i] = toupper(green_pass.tessera_sanitaria[i]);
+    }
     green_pass.service = VALIDATION_GP;
 
     // Invio del codice al serverG
