@@ -51,19 +51,20 @@ int main(int argc, char * argv[]) {
         perror("Errore durante l'invio del codice della tessera sanitaria al centro vaccinale");
         exit(EXIT_FAILURE);
     }
-    // Riceve la risposta dal centro vaccinale
+    /* Attende la risposta da parte del centro vaccinale */
     int response;
     if (recv(sock, &response, sizeof(response), 0) < 0) {
         perror("Errore durante la ricezione della risposta dal centro vaccinale");
         exit(EXIT_FAILURE);
     }
-    // Controlla se il Green Pass è valido o meno
+    /* Controlla se il green pass è valido o meno
+     * in base alla variabile response */
     if (response == 0) {
         printf("Green pass non valido\n");
     } else {
         printf("Green pass valido\n");
     }
-    // Chiude la connessione con la socket
+    /* Chiude la connessione con la socket */
     close(sock);
     return 0;
 }

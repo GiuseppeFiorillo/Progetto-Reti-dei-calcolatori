@@ -22,7 +22,7 @@ void sigint_handler(int sig);
 int main() {
     /* Crea i file descriptor per le socket */
     int serverV_sock, client_sock;
-    /* Crea le struct `sockaddr_in` per stabilire la connessione */
+    /* Crea le struct `sockaddr_in` per stabilire le connessioni */
     struct sockaddr_in serverV_address, client_address;
     socklen_t client_address_length;
     /* Crea un array utilizzato per memorizzare un pool di thread che possono
@@ -45,7 +45,7 @@ int main() {
     /* Imposta tutti i byte di `serverV_address` a 0 */
     memset(&serverV_address, 0, sizeof(serverV_address));
     /* Inizializza tutti i campi della struct `sockaddr_in` */
-    serverV_address.sin_family = AF_INET;
+    serverV_address.sin_family = AF_INET; // utilizza un protocollo IPv4
     serverV_address.sin_addr.s_addr = htonl(INADDR_ANY); // ascolta su tutte le interfacce di rete disponibili
     serverV_address.sin_port = htons(SERVERV_PORT); // si mette in ascolto sulla porta 8890
     /* Esegue la bind per impostare tutti i campi della struct `sockaddr_in` */
@@ -181,18 +181,24 @@ void * handle_connection(void * arg) {
             bool isHere = false;
             char buffer[64];
 
+            /* Prendiamo dal file le singole righe che salviamo in un buffer */
             while (fgets(buffer, sizeof(buffer), green_pass_file) != NULL) {
                 char tmpTessera[TESSERA_LENGTH + 1];
                 int day, month, year;
                 buffer[strlen(buffer) - 1] = '\0';
+                /* Salviamo in items gli elementi che ci interessa controllare nella stringa del file */
                 int items = sscanf(buffer, "%[^ ] : %*d/%*d/%*d : %d/%d/%d : %*d", tmpTessera, &day, &month, &year);
                 if (items != 4) {
                     continue; // La linea considerata non è valida, pertanto la saltiamo
                 }
 
+                /* Compariamo le stringhe delle tessere sanitarie
+                 * per controllare se sono uguali o meno */
                 if (strncmp(tmpTessera, green_pass.tessera_sanitaria, TESSERA_LENGTH) == 0) {
+                    /* Caso in cui il green pass è presente all'interno del file */
                     isHere = true;
                     char * isValid = buffer + strlen(buffer) - 1;
+                    // Controlliamo la validità
                     if (*isValid == '1') {
                         time_t now = time(NULL);
                         struct tm * expiry_date_struct = localtime(&now);
@@ -202,43 +208,47 @@ void * handle_connection(void * arg) {
                         time_t expiry_date = mktime(expiry_date_struct);
 
                         if (expiry_date < now) {
+                            /* Caso in cui il green pass sia scaduto */
                             response = 0;
-                            // Il green pass è scaduto
+                            /* Invia la risposta al server G */
                             if (send(client_sock, &response, sizeof(int), 0) == -1) {
                                 perror("Errore nell'invio della risposta al serverG");
-                                fclose(green_pass_file);
-                                close(client_sock);
-                                pthread_mutex_unlock(&mutex);
+                                fclose(green_pass_file); // chiude il file
+                                close(client_sock); // chiude la socket
+                                pthread_mutex_unlock(&mutex); // sblocca il mutex
                                 return NULL;
                             }
 
-                            fclose(green_pass_file);
-                            close(client_sock);
-                            pthread_mutex_unlock(&mutex);
+                            fclose(green_pass_file); // chiude il file
+                            close(client_sock); // chiude la socket
+                            pthread_mutex_unlock(&mutex); // sblocca il mutex
                             return NULL;
                         } else {
+                            /* Caso in cui il green pass sia valido */
                             response = 1;
-                            // Il green pass è valido
+                            /* Invia la risposta al server G */
                             if (send(client_sock, &response, sizeof(int), 0) == -1) {
                                 perror("Errore nell'invio della risposta al serverG");
-                                fclose(green_pass_file);
-                                close(client_sock);
-                                pthread_mutex_unlock(&mutex);
+                                fclose(green_pass_file); // chiude il file
+                                close(client_sock); // chiude la socket
+                                pthread_mutex_unlock(&mutex); // sblocca il mutex
                                 return NULL;
                             }
-                            fclose(green_pass_file);
-                            close(client_sock);
-                            pthread_mutex_unlock(&mutex);
+                            fclose(green_pass_file); // chiude il file
+                            close(client_sock); // chiude la socket
+                            pthread_mutex_unlock(&mutex); // sblocca il mutex
                             return NULL;
                         }
 
                     } else {
+                        /* Caso in cui il green pass non sia valido */
                         response = -1;
+                        /* Invio la risposta al server G */
                         if (send(client_sock, &response, sizeof(int), 0) == -1) {
                             perror("Errore nell'invio della risposta al serverG");
-                            fclose(green_pass_file);
-                            close(client_sock);
-                            pthread_mutex_unlock(&mutex);
+                            fclose(green_pass_file); // chiude il file
+                            close(client_sock); // chiude la socket
+                            pthread_mutex_unlock(&mutex); // sblocca il mutex
                             return NULL;
                         }
                     }
@@ -246,12 +256,14 @@ void * handle_connection(void * arg) {
             }
 
             if (!isHere) {
+                /* Caso in cui il green pass non sia presente all'interno del file */
                 response = -2;
+                /* Invia la risposta al server G */
                 if (send(client_sock, &response, sizeof(int), 0) == -1) {
                     perror("Errore nell'invio della risposta al serverG");
-                    fclose(green_pass_file);
-                    close(client_sock);
-                    pthread_mutex_unlock(&mutex);
+                    fclose(green_pass_file); // chiude il file
+                    close(client_sock); // chiude la socket
+                    pthread_mutex_unlock(&mutex); // sblocca il mutex
                     return NULL;
                 }
             }
@@ -264,7 +276,7 @@ void * handle_connection(void * arg) {
             long int offset = 0;
             while (fgets(buffer, sizeof(buffer), green_pass_file) != NULL) {
                 if (strncmp(buffer, green_pass.tessera_sanitaria, TESSERA_LENGTH) == 0) {
-                    // Trovata corrispondenza tra la stringa del buffer e quella presente nel file
+                    /* Caso in cui viene trovata la corrispondenza all'interno del file */
                     int isValid = buffer[strlen(buffer) - 2] - '0';
                     isValid = isValid == 1 ? 0 : 1;
                     offset = -2;
@@ -277,19 +289,17 @@ void * handle_connection(void * arg) {
             break;
         }
     }
-    /* Unlock del mutex */
+    /* Sblocco del mutex */
     pthread_mutex_unlock(&mutex);
-    /* Invio della risposta al `client_sock` */
     response = 1;
+    /* Invio della risposta al `client_sock` */
     if (send(client_sock, &response, sizeof(int), 0) == -1) {
         perror("Errore nell'invio della risposta al client");
-        close(client_sock);
+        close(client_sock); // chiude la socket
         return NULL;
     }
-    /* Chiusura del file descriptor collegato al file */
-    fclose(green_pass_file);
-    /* Chiusura della connessione con il `client_sock` */
-    close(client_sock);
+    fclose(green_pass_file); // chiude il file
+    close(client_sock); // chiude la socket
     return NULL;
 }
 

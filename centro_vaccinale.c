@@ -132,26 +132,26 @@ void * handle_connection(void * arg) {
         close(client_sock);
         return NULL;
     }
-    // Crea un indirizzo per il socket del serverV
+    /* Crea la struct `sockaddr_in` per stabilire la connessione */
     struct sockaddr_in serverV_address;
+    /* Imposta tutti i byte di `serverV_address` a 0 */
     memset(&serverV_address, 0, sizeof(serverV_address));
-    serverV_address.sin_family = AF_INET; // Il tipo di connessione, `AF_INET` indica l'utilizzo del protocollo IPv4
-    serverV_address.sin_addr.s_addr = inet_addr(LOCAL_HOST);
-    serverV_address.sin_port = htons(SERVERV_PORT); /* Con `htons` convertiamo la costante `SERVERV_PORT`
-    * in un formato a 16 bit */
+    serverV_address.sin_family = AF_INET; // utilizza un protocollo IPv4
+    serverV_address.sin_addr.s_addr = inet_addr(LOCAL_HOST); // ascolta sull'interfaccia di rete locale
+    serverV_address.sin_port = htons(SERVERV_PORT); // si mette in ascolto sulla porta 8890
 
     /* Connessione al `serverV_sock` */
     if (connect(serverV_sock, (struct sockaddr *) &serverV_address, sizeof(serverV_address)) == -1) {
         perror("Errore durante la connessione a serverV");
-        close(client_sock);
-        close(serverV_sock);
+        close(client_sock); // chiude la socket del client
+        close(serverV_sock); // chiude la socket del server
         return NULL;
     }
     /* Invio dei dati al server V */
     if (send(serverV_sock, &green_pass, sizeof(green_pass), 0) == -1) {
         perror("Errore durante l'invio del green pass a serverV");
-        close(client_sock);
-        close(serverV_sock);
+        close(client_sock); // chiude la socket del client
+        close(serverV_sock); // chiude la socket del server
         return NULL;
     }
     printf("Green pass inviato correttamente.\n");
@@ -159,8 +159,8 @@ void * handle_connection(void * arg) {
     int response;
     if (recv(serverV_sock, &response, sizeof(int), 0) == -1) {
         perror("Errore durante la ricezione della risposta da servervV");
-        close(client_sock);
-        close(serverV_sock);
+        close(client_sock); // chiude la socket del client
+        close(serverV_sock); // chiude la socket del server
         return NULL;
     }
     printf("response: %d\n", response);
@@ -168,20 +168,20 @@ void * handle_connection(void * arg) {
         /* Nel caso in cui `response` valga 1, allora comunica l'avvenuta creazione del Green Pass al client */
         if (send(client_sock, &response, sizeof(int), 0) == -1) {
             perror("Errore durante l'invio della risposta al client");
-            close(client_sock);
-            close(serverV_sock);
+            close(client_sock); // chiude la socket del client
+            close(serverV_sock); // chiude la socket del server
             return NULL;
         } else {
             /* Nel caso in cui invece valga 0, comunica che il Green Pass esiste al client */
             if (send(client_sock, &response, sizeof(int), 0) == -1) {
                 perror("Errore durante l'invio della risposta al client");
-                close(client_sock);
-                close(serverV_sock);
+                close(client_sock); // chiude la socket del client
+                close(serverV_sock); // chiude la socket del server
                 return NULL;
             }
         }
     }
-    // Chiusura dei socket
+    /* Chiusura dei vari socket aperti in precedenza */
     close(client_sock);
     close(serverV_sock);
     return NULL;
