@@ -54,7 +54,7 @@ int main(int argc, char * argv[]) {
     int response;
     /* Aspetta di ricevere una risposta dal server */
     if (recv(client_sock, &response, sizeof(response), 0) < 0) {
-        perror("Errore durante la ricezione della risposta dal centro vaccinale");
+        perror("Errore durante la ricezione della risposta dal serverG");
         exit(EXIT_FAILURE);
     }
 

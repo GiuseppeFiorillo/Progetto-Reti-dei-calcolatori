@@ -48,7 +48,7 @@ int main(int argc, char * argv[]) {
 
     /* Invia il green pass al centro vaccinale */
     if (send(client_sock, &green_pass, sizeof(green_pass), 0) == -1) {
-        perror("Errore durante l'invio del codice della tessera sanitaria al centro vaccinale");
+        perror("Errore durante l'invio del codice della tessera sanitaria al serverG");
         close(client_sock);
         exit(EXIT_FAILURE);
     }
@@ -56,7 +56,7 @@ int main(int argc, char * argv[]) {
     /* Attende la risposta da parte del socket */
     int response;
     if (recv(client_sock, &response, sizeof(response), 0) < 0) {
-        perror("Errore durante la ricezione della risposta dal centro vaccinale");
+        perror("Errore durante la ricezione della risposta dal serverG");
         exit(EXIT_FAILURE);
     }
 
